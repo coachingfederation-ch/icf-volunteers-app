@@ -182,7 +182,7 @@ struct NativeChatWebView: UIViewRepresentable {
         // A touch of breathing room between the branded bar and the page
         // content (above the QR icon).
         webView.scrollView.contentInset = UIEdgeInsets(
-            top: 8, left: 0, bottom: 0, right: 0)
+            top: 16, left: 0, bottom: 0, right: 0)
         webView.scrollView.scrollIndicatorInsets = .zero
 
         context.coordinator.webView = webView
