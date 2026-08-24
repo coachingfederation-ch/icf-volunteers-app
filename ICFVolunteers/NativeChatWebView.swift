@@ -29,13 +29,17 @@ struct ChatWebViewContainer: View {
     }
 }
 
+/// Shared app layout constants.
+enum AppLayout {
+    /// Height of the branded header's title row (below the status bar).
+    static let headerContentHeight: CGFloat = 44
+}
+
 /// Deep-Blue branded header: a status-bar spacer plus a title row BELOW the
 /// status bar, so the logo/title never collide with the clock or Dynamic
 /// Island. Overlays the page's own safe-area reservation (which the page pads
 /// for), so there is no seam between the bar and the content below it.
 private struct BrandedBar: View {
-    private static let contentHeight: CGFloat = 44
-
     var body: some View {
         VStack(spacing: 0) {
             // Status-bar region — empty spacer painted by the bar background,
@@ -53,7 +57,7 @@ private struct BrandedBar: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .frame(height: Self.contentHeight)
+            .frame(height: AppLayout.headerContentHeight)
         }
         .frame(maxWidth: .infinity)
         .background(AppColors.deepBlue)
@@ -166,7 +170,11 @@ struct NativeChatWebView: UIViewRepresentable {
         webView.backgroundColor = UIColor(AppColors.deepBlue)
         webView.scrollView.backgroundColor = UIColor(AppColors.deepBlue)
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.contentInset = .zero
+        // The page reserves the notch (62pt) itself, but the header is that
+        // 62pt PLUS a 44pt title band. Push the page content down by the extra
+        // title-band height (plus a small margin) so it clears the full header.
+        webView.scrollView.contentInset = UIEdgeInsets(
+            top: AppLayout.headerContentHeight + 8, left: 0, bottom: 0, right: 0)
         webView.scrollView.scrollIndicatorInsets = .zero
 
         context.coordinator.webView = webView
