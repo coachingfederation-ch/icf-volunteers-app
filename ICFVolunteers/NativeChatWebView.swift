@@ -144,8 +144,8 @@ struct NativeChatWebView: UIViewRepresentable {
                   if (n !== c) vp.setAttribute('content', n);
                 }
                 var root = document.querySelector('[class*="min-h-"][class*="flex-col"]');
-                if (root && root.style.paddingTop !== '0px') {
-                  root.style.setProperty('padding-top', '0px', 'important');
+                if (root && root.style.paddingTop !== '24px') {
+                  root.style.setProperty('padding-top', '24px', 'important');
                 }
               }
               fix();
@@ -179,10 +179,7 @@ struct NativeChatWebView: UIViewRepresentable {
         // indicator) and its 100dvh equals the visible height. No manual
         // content-inset offsets are needed.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // A touch of breathing room between the branded bar and the page
-        // content (above the QR icon).
-        webView.scrollView.contentInset = UIEdgeInsets(
-            top: 16, left: 0, bottom: 0, right: 0)
+        webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
 
         context.coordinator.webView = webView
@@ -260,11 +257,10 @@ struct NativeChatWebView: UIViewRepresentable {
                   if (n !== c) vp.setAttribute('content', n);
                 }
                 var root = document.querySelector('[class*="min-h-"][class*="flex-col"]');
-                if (root && root.style.paddingTop !== '0px') {
-                  root.style.setProperty('padding-top', '0px', 'important');
+                if (root && root.style.paddingTop !== '24px') {
+                  root.style.setProperty('padding-top', '24px', 'important');
                 }
-                return root ? getComputedStyle(root).paddingTop + '|bg:' + getComputedStyle(root).backgroundColor : 'NOROOT';
-              }
+                return root ? getComputedStyle(root).paddingTop : 'NOROOT';
               fix();
               // Re-apply whenever the framework rebuilds the DOM.
               window.__icfWhiteBandObserver = window.__icfWhiteBandObserver
