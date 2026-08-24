@@ -173,14 +173,10 @@ struct NativeChatWebView: UIViewRepresentable {
         // The page reserves the notch (62pt) itself, but the header is that
         // 62pt PLUS a 44pt title band. Push the page content down by the extra
         // title-band height (plus a small margin) so it clears the full header.
-        let windowInsets = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.safeAreaInsets ?? .zero
         webView.scrollView.contentInset = UIEdgeInsets(
             top: AppLayout.headerContentHeight + 8,
             left: 0,
-            // Ensure bottom content clears the home indicator.
-            bottom: windowInsets.bottom,
+            bottom: 0,
             right: 0)
         webView.scrollView.scrollIndicatorInsets = .zero
 
