@@ -1,0 +1,56 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- ICF Switzerland app icon, brand-faithful recreation of the official mark.
+       Tokens: Deep Blue #212251 (bg), ICF Blue #2B379B, cyan #0FC5D2 (i-dot/wordmark),
+       Yellow #EFCB30 (accent stroke), bone #F6F2EA (page field). -->
+
+  <defs>
+    <!-- Soft rounded-rect clip so corners match iOS app-icon mask -->
+    <clipPath id="corner">
+      <rect x="0" y="0" width="1024" height="1024" rx="225"/>
+    </clipPath>
+    <!-- Gentle radial depth on the Deep Blue field -->
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#2B3A9B"/>
+      <stop offset="55%" stop-color="#252E77"/>
+      <stop offset="100%" stop-color="#191c49"/>
+    </radialGradient>
+  </defs>
+
+  <g clip-path="url(#corner)">
+    <!-- Base: Deep Blue -->
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <!-- Decorative brush-stroke accent (brand mark) top-right, low opacity -->
+    <g opacity="0.14">
+      <path d="M760 60 C 830 120, 900 90, 960 170 C 980 200, 968 250, 940 300"
+            stroke="#EFCB30" stroke-width="46" fill="none" stroke-linecap="round"/>
+      <path d="M782 122 C 852 182, 884 160, 924 230"
+            stroke="#FFFFFF" stroke-width="20" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- Bone-cream page field, lower-center -->
+    <rect x="168" y="330" width="688" height="428" rx="150" fill="#F6F2EA"/>
+
+    <!-- Official i-f monogram (recreated): navy stem + cyan dot + interlocking f -->
+    <!-- 'i' stem -->
+    <rect x="352" y="452" width="120" height="236" rx="52" fill="#2B379B"/>
+    <!-- 'i' dot -->
+    <circle cx="420" cy="372" r="58" fill="#0FC5D2"/>
+    <!-- 'f' body -->
+    <path d="M 560 452
+             C 640 452, 690 492, 690 566
+             C 690 648, 634 688, 548 688
+             C 516 688, 492 678, 476 664
+             C 474 660, 474 656, 478 650
+             L 512 596
+             C 518 584, 534 578, 546 584
+             C 568 598, 596 598, 610 584
+             C 626 568, 622 548, 606 542
+             C 596 538, 576 538, 560 538
+             L 560 452 Z"
+          fill="#2B379B"/>
+  </g>
+
+  <!-- Yellow underline accent, subtle -->
+  <rect x="352" y="300" width="320" height="18" rx="9" fill="#EFCB30" opacity="0.9"/>
+</svg>

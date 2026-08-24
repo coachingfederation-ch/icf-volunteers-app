@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Xcode user state (not project config)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Build output
+build/
+DerivedData/
+
+# XcodeGen generated project — committed so others can build without it.
+# Regenerate with: xcodegen generate
+
+# Design intermediates
+design/*.pyc
+__pycache__/
+
+# Environment / secrets — never commit
+.env
+*.p8
+*.mobileprovision
