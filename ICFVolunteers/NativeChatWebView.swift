@@ -1,29 +1,22 @@
 import SwiftUI
 import WebKit
 
-/// A WKWebView that stays edge-to-edge but reports the real safe-area insets
-/// to the page, so the web app's `env(safe-area-inset-*)` padding is correct.
-final class SafeAreaAwareWebView: WKWebView {
-    override var safeAreaInsets: UIEdgeInsets {
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.safeAreaInsets ?? super.safeAreaInsets
-    }
-}
+/// A WKWebView that fills the area below the branded bar. Because it sits
+/// below the status bar, the page sees a top safe-area inset of 0 (so it does
+/// not double-pad its own header) and the real bottom inset (so it pads for
+/// the home indicator). The page's `100dvh` therefore equals the visible
+/// height below the bar — content fits on screen instead of scrolling off.
+final class SafeAreaAwareWebView: WKWebView {}
 
-/// SwiftUI entry point: the volunteer chat rendered full-bleed with a small
-/// branded bar overlaying the top safe-area region, plus a short splash.
+/// SwiftUI entry point: a branded header above the volunteer chat, with a
+/// short splash overlay so the launch screen reads at a glance.
 struct ChatWebViewContainer: View {
     var body: some View {
-        ZStack(alignment: .top) {
-            // Web view fills the whole screen (edge-to-edge, under the notch).
-            // The page is a full-bleed PWA and pads its own header by
-            // env(safe-area-inset-top), so its top 62pt is a correct notch
-            // reservation — the opaque branded bar below sits exactly on it.
-            NativeChatWebView()
-                .ignoresSafeArea(edges: .all)
-            // Bar overlays exactly the safe-area top region the page reserves.
+        VStack(spacing: 0) {
             BrandedBar()
+            // Web view fills the remaining visible height below the bar.
+            NativeChatWebView()
+                .ignoresSafeArea(edges: .bottom) // reach under the home indicator
         }
         .overlay(SplashOverlay())
     }
@@ -119,65 +112,17 @@ struct NativeChatWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> SafeAreaAwareWebView {
         let config = WKWebViewConfiguration()
-
-        // The native branded bar owns the top, but the page is a full-bleed PWA
-        // (viewport-fit=cover) that reserves env(safe-area-inset-top) for the
-        // notch. WebKit computes that from the device, not from our view, so a
-        // white band appears under the bar. Paint that reserved region Deep
-        // Blue (matching the bar) so there is no visible seam, and remove the
-        // top safe-area offset so content sits directly under the bar.
-        let script = WKUserScript(
-            source: """
-            (function () {
-              function fix() {
-                // Remove the top safe-area reservation.
-                var vp = document.querySelector('meta[name="viewport"]');
-                if (vp) {
-                  var c = vp.getAttribute('content') || '';
-                  var n = c.replace(/\\s*viewport-fit=cover\\s*,?/i, '');
-                  if (n !== c) vp.setAttribute('content', n);
-                }
-                // Belt and braces: paint the root deep blue so any reserved
-                // region blends with the branded bar (inline, highest priority).
-                var html = document.documentElement;
-                var body = document.body;
-                html.style.setProperty('background-color', '#212251', 'important');
-                html.style.setProperty('min-height', '100%', 'important');
-                if (body) body.style.setProperty('background-color', '#212251', 'important');
-              }
-              fix();
-              document.addEventListener('DOMContentLoaded', fix);
-              // Also fix on React hydration (TanStack may re-render the head).
-              setTimeout(fix, 1000);
-              setTimeout(fix, 3000);
-            })();
-            """,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        config.userContentController.addUserScript(script)
         config.userContentController.add(context.coordinator, name: "nativeBridge")
 
         let webView = SafeAreaAwareWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        // Color any region under the page content (e.g. reserved safe areas)
-        // Deep Blue so it blends with the branded bar instead of showing white.
-        if #available(iOS 15.0, *) {
-            webView.underPageBackgroundColor = UIColor(AppColors.deepBlue)
-        }
-        webView.isOpaque = true
-        webView.backgroundColor = UIColor(AppColors.deepBlue)
-        webView.scrollView.backgroundColor = UIColor(AppColors.deepBlue)
+        // The web view sits below the branded bar, so the page sees its own
+        // safe-area insets (top 0 below the bar, real bottom for the home
+        // indicator) and its 100dvh equals the visible height. No manual
+        // content-inset offsets are needed.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // The page reserves the notch (62pt) itself, but the header is that
-        // 62pt PLUS a 44pt title band. Push the page content down by the extra
-        // title-band height (plus a small margin) so it clears the full header.
-        webView.scrollView.contentInset = UIEdgeInsets(
-            top: AppLayout.headerContentHeight + 8,
-            left: 0,
-            bottom: 0,
-            right: 0)
+        webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
 
         context.coordinator.webView = webView
