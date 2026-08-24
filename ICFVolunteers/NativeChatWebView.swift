@@ -29,24 +29,32 @@ struct ChatWebViewContainer: View {
     }
 }
 
-/// Thin Deep-Blue bar with the ICF logo + app name. It overlays only the top
-/// safe-area region (the notch/status-bar height) that the page already
-/// reserves via env(safe-area-inset-top), so there is no dead space between
-/// the bar and the page content.
+/// Deep-Blue branded header: a status-bar spacer plus a title row BELOW the
+/// status bar, so the logo/title never collide with the clock or Dynamic
+/// Island. Overlays the page's own safe-area reservation (which the page pads
+/// for), so there is no seam between the bar and the content below it.
 private struct BrandedBar: View {
+    private static let contentHeight: CGFloat = 44
+
     var body: some View {
-        HStack(spacing: 8) {
-            Image("LaunchLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 22)
-            Text("ICF Volunteers")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-            Spacer()
+        VStack(spacing: 0) {
+            // Status-bar region — empty spacer painted by the bar background,
+            // so the system clock / Dynamic Island render here cleanly.
+            Color.clear.frame(height: Self.topInset)
+            // Title row — sits fully below the status bar.
+            HStack(spacing: 8) {
+                Image("LaunchLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 22)
+                Text("ICF Volunteers")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .frame(height: Self.contentHeight)
         }
-        .padding(.horizontal, 16)
-        .frame(height: Self.topInset) // exactly the notch/status-bar height
         .frame(maxWidth: .infinity)
         .background(AppColors.deepBlue)
         .ignoresSafeArea(edges: .top)
