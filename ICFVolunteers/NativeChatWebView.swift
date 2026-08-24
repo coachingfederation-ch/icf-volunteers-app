@@ -2,11 +2,17 @@ import SwiftUI
 import WebKit
 
 /// A WKWebView that fills the area below the branded bar. Because it sits
-/// below the status bar, the page sees a top safe-area inset of 0 (so it does
-/// not double-pad its own header) and the real bottom inset (so it pads for
-/// the home indicator). The page's `100dvh` therefore equals the visible
-/// height below the bar — content fits on screen instead of scrolling off.
-final class SafeAreaAwareWebView: WKWebView {}
+/// below the status bar, it reports a top safe-area inset of 0 (so the page's
+/// env(safe-area-inset-top) resolves to 0 and it stops padding its own header)
+/// and the real bottom inset (so it pads for the home indicator).
+final class SafeAreaAwareWebView: WKWebView {
+    override var safeAreaInsets: UIEdgeInsets {
+        let s = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets ?? super.safeAreaInsets
+        return UIEdgeInsets(top: 0, left: 0, bottom: s.bottom, right: 0)
+    }
+}
 
 /// SwiftUI entry point: a branded header above the volunteer chat, with a
 /// short splash overlay so the launch screen reads at a glance.
@@ -16,8 +22,13 @@ struct ChatWebViewContainer: View {
             BrandedBar()
             // Web view fills the remaining visible height below the bar.
             NativeChatWebView()
-                .ignoresSafeArea(edges: .bottom) // reach under the home indicator
         }
+        // The TOP inset must be ignored on the CONTAINER: ignoring it on the
+        // child leaves the child pushed down by the status-bar inset, opening
+        // a 62pt white gap between the bar and the web content (the bar's own
+        // background already paints under the status bar). The BOTTOM is
+        // ignored so the page reaches under the home indicator.
+        .ignoresSafeArea(edges: [.top, .bottom])
         .overlay(SplashOverlay())
     }
 }
@@ -112,17 +123,66 @@ struct NativeChatWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> SafeAreaAwareWebView {
         let config = WKWebViewConfiguration()
+
+        // The web view sits below the branded bar, but the page root uses
+        // `pt-[max(1.5rem,env(safe-area-inset-top))]`. In the app, viewport-fit
+        // makes env(safe-area-inset-top) resolve to the full 62pt notch, so the
+        // page pads 186px and shows a white band. A one-shot WKUserScript runs
+        // too early (before TanStack hydration re-renders the DOM) to persist.
+        // The robust fix is applied from didFinish via evaluateJavaScript (see
+        // applyWhiteBandFix), which runs after the page is ready, re-applies on
+        // a MutationObserver, and is re-run on every navigation. This early
+        // documentStart script just avoids the white flash on first paint.
+        let script = WKUserScript(
+            source: """
+            (function () {
+              function fix() {
+                var vp = document.querySelector('meta[name="viewport"]');
+                if (vp) {
+                  var c = vp.getAttribute('content') || '';
+                  var n = c.replace(/\\s*viewport-fit=cover\\s*,?/i, '');
+                  if (n !== c) vp.setAttribute('content', n);
+                }
+                var root = document.querySelector('[class*="min-h-"][class*="flex-col"]');
+                if (root && root.style.paddingTop !== '0px') {
+                  root.style.setProperty('padding-top', '0px', 'important');
+                }
+              }
+              fix();
+              document.addEventListener('DOMContentLoaded', fix);
+              setTimeout(fix, 500);
+              setTimeout(fix, 1500);
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        config.userContentController.addUserScript(script)
         config.userContentController.add(context.coordinator, name: "nativeBridge")
 
         let webView = SafeAreaAwareWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
+        // The page root uses min-h-[100dvh], which over-states the visible
+        // height now that the web view sits below the branded bar — the excess
+        // shows the (white) page body at the top edge. Color the under-page
+        // background Deep Blue so any such region blends with the bar instead
+        // of showing white.
+        if #available(iOS 15.0, *) {
+            webView.underPageBackgroundColor = UIColor(AppColors.deepBlue)
+        }
+        webView.isOpaque = true
+        webView.backgroundColor = UIColor(AppColors.deepBlue)
+        webView.scrollView.backgroundColor = UIColor(AppColors.deepBlue)
         // The web view sits below the branded bar, so the page sees its own
         // safe-area insets (top 0 below the bar, real bottom for the home
         // indicator) and its 100dvh equals the visible height. No manual
         // content-inset offsets are needed.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.contentInset = .zero
+        // A touch of breathing room between the branded bar and the page
+        // content (above the QR icon).
+        webView.scrollView.contentInset = UIEdgeInsets(
+            top: 8, left: 0, bottom: 0, right: 0)
         webView.scrollView.scrollIndicatorInsets = .zero
 
         context.coordinator.webView = webView
@@ -174,7 +234,103 @@ struct NativeChatWebView: UIViewRepresentable {
         // MARK: WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            NSLog("[ICFWB] didFinish fired")
             injectToken()
+            // Runs after the page (and its framework hydration) has finished
+            // loading, so the root element exists and the padding fix sticks.
+            applyWhiteBandFix()
+        }
+
+        /// Removes the 186px white band at the top of the web content. The
+        /// band comes from the page root's `pt-[max(1.5rem,env(safe-area-inset-top))]`
+        /// resolving to the full ~62pt notch inside the WKWebView (viewport-fit
+        /// is set). Unlike a one-shot WKUserScript, this is driven from
+        /// didFinish and re-applies via a MutationObserver plus a short-lived
+        /// interval, so it survives TanStack re-renders and the app's reloads.
+        /// It is re-run on every navigation (didFinish).
+        private func applyWhiteBandFix() {
+            guard let webView else { return }
+            let js = """
+            (function () {
+              function fix() {
+                var vp = document.querySelector('meta[name="viewport"]');
+                if (vp) {
+                  var c = vp.getAttribute('content') || '';
+                  var n = c.replace(/\\s*viewport-fit=cover\\s*,?/i, '');
+                  if (n !== c) vp.setAttribute('content', n);
+                }
+                var root = document.querySelector('[class*="min-h-"][class*="flex-col"]');
+                if (root && root.style.paddingTop !== '0px') {
+                  root.style.setProperty('padding-top', '0px', 'important');
+                }
+                return root ? getComputedStyle(root).paddingTop + '|bg:' + getComputedStyle(root).backgroundColor : 'NOROOT';
+              }
+              fix();
+              // Re-apply whenever the framework rebuilds the DOM.
+              window.__icfWhiteBandObserver = window.__icfWhiteBandObserver
+                || new MutationObserver(function () { fix(); });
+              window.__icfWhiteBandObserver.observe(document.documentElement, {
+                childList: true, subtree: true, attributes: true,
+                attributeFilter: ['class', 'style']
+              });
+              // Fallback in case the observer is throttled during hydration.
+              if (!window.__icfWhiteBandTimer) {
+                var tries = 0;
+                window.__icfWhiteBandTimer = setInterval(function () {
+                  fix();
+                  if (++tries > 5) clearInterval(window.__icfWhiteBandTimer);
+                }, 800);
+              }
+              return fix();
+            })();
+            """
+            webView.evaluateJavaScript(js) { result, error in
+                if let error = error {
+                    NSLog("[ICFWB] eval error: \(error.localizedDescription)")
+                } else {
+                    NSLog("[ICFWB] fix result: \(String(describing: result))")
+                }
+            }
+
+            // Late diagnostic + re-fix: the TanStack root may render well after
+            // didFinish. Re-run the fix from Swift at later points.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak webView] in
+                guard let webView else { return }
+                let dbg = """
+                (function () {
+                  var el = document.elementFromPoint(window.innerWidth/2, 10);
+                  return JSON.stringify({
+                    innerH: window.innerHeight, innerW: window.innerWidth,
+                    scrollY: window.scrollY,
+                    scrollTop: document.scrollingElement ? document.scrollingElement.scrollTop : null,
+                    docScrollH: document.documentElement.scrollHeight,
+                    bodyScrollH: document.body ? document.body.scrollHeight : null,
+                    topEl: el ? {tag: el.tagName, cls: String(el.className).slice(0,60)} : null
+                  });
+                })();
+                """
+                webView.evaluateJavaScript(dbg) { r, e in
+                    var pageStr = "?"
+                    if let r = r as? String { pageStr = r }
+                    let f = webView.frame
+                    let sv = webView.scrollView
+                    let winFrame = webView.convert(webView.bounds, to: nil)
+                    var superDesc = "nil"
+                    if let sup = webView.superview {
+                        let sf = sup.frame
+                        superDesc = String(format: "%@ frame=%.0f,%.0f %.0fx%.0f safe=%.0f/%.0f/%.0f/%.0f", NSStringFromClass(type(of: sup)), sf.origin.x, sf.origin.y, sf.width, sf.height, sup.safeAreaInsets.top, sup.safeAreaInsets.left, sup.safeAreaInsets.bottom, sup.safeAreaInsets.right)
+                    }
+                    let native = String(format: "frame=%.0f,%.0f %.0fx%.0f winFrame=%.0f,%.0f %.0fx%.0f contentOffset=%.0f,%.0f contentInset=%.0f,%.0f,%.0f,%.0f contentSize=%.0fx%.0f super=%@",
+                                        f.origin.x, f.origin.y, f.width, f.height,
+                                        winFrame.origin.x, winFrame.origin.y, winFrame.width, winFrame.height,
+                                        sv.contentOffset.x, sv.contentOffset.y,
+                                        sv.contentInset.top, sv.contentInset.left,
+                                        sv.contentInset.bottom, sv.contentInset.right,
+                                        sv.contentSize.width, sv.contentSize.height,
+                                        superDesc)
+                    NSLog("[ICFWB] NATIVE(4s): \(native) | page: \(pageStr)")
+                }
+            }
         }
 
         // MARK: WKScriptMessageHandler (web → native)
